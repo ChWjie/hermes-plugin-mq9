@@ -1,0 +1,23 @@
+# Hermes-A template for mq9 plugin.
+# Replace names as needed; keep nats_url aligned with RobustMQ config.
+model: deepseek-chat
+toolsets:
+  - hermes-cli
+  - mq9
+plugins:
+  enabled:
+    - mq9
+  disabled: []
+  entries:
+    mq9:
+      nats_url: nats://127.0.0.1:45222
+      agent_name: hermes-a
+      mailbox: hermes.a.inbox
+      mailbox_ttl: 86400
+      auto_register: true
+      passive_serve: true
+      passive_execute_mode: minimal
+      default_discover_limit: 10
+      default_call_timeout_s: 30
+      default_protocol: a2a
+      discovery_require_protocol: true

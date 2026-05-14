@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "mq9": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://127.0.0.1:39080/mcp"
+      ]
+    }
+  }
+}

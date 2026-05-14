@@ -12,6 +12,15 @@ Last updated: 2026-05-14
 
 Repository now also supports Hermes ecosystem directory install (`hermes plugins install owner/repo`) by shipping root-level `plugin.yaml` + `__init__.py` shim.
 
+Full-chain user guide:
+
+- [`examples/hermes-openclaw-fullchain/README.md`](examples/hermes-openclaw-fullchain/README.md)
+
+RobustMQ source of truth:
+
+- [`robustmq/robustmq`](https://github.com/robustmq/robustmq)
+- mq9 blogs: https://robustmq.com/zh/Blogs/96, /99, /101, /102, /103
+
 ## Why standalone
 
 Hermes maintainers requested standalone plugin delivery (not new in-tree plugin under `plugins/`).

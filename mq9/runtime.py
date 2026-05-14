@@ -22,6 +22,16 @@ from dataclasses import dataclass
 from typing import Any
 
 from .mq9_client import Mq9Client, Mq9Error
+from .protocol_bridge import (
+    DEFAULT_PROTOCOL,
+    agent_supports_protocol,
+    build_call_reply,
+    build_transport_metadata,
+    extract_agent_protocols,
+    normalize_protocol,
+    normalize_protocols,
+    parse_call_envelope,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +54,8 @@ class RuntimeConfig:
     oneshot_timeout_s: float
     oneshot_provider: str
     oneshot_model: str
+    default_protocol: str
+    discovery_require_protocol: bool
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -61,6 +73,8 @@ class RuntimeConfig:
             "oneshot_timeout_s": self.oneshot_timeout_s,
             "oneshot_provider": self.oneshot_provider,
             "oneshot_model": self.oneshot_model,
+            "default_protocol": self.default_protocol,
+            "discovery_require_protocol": self.discovery_require_protocol,
         }
 
 
@@ -164,6 +178,8 @@ def _load_runtime_config(plugin_id: str = "mq9") -> RuntimeConfig:
         "oneshot_timeout_s": os.getenv("HERMES_MQ9_ONESHOT_TIMEOUT"),
         "oneshot_provider": os.getenv("HERMES_MQ9_ONESHOT_PROVIDER"),
         "oneshot_model": os.getenv("HERMES_MQ9_ONESHOT_MODEL"),
+        "default_protocol": os.getenv("HERMES_MQ9_DEFAULT_PROTOCOL"),
+        "discovery_require_protocol": os.getenv("HERMES_MQ9_DISCOVERY_REQUIRE_PROTOCOL"),
     }
     for key, value in env_map.items():
         if value not in (None, ""):
@@ -194,6 +210,8 @@ def _load_runtime_config(plugin_id: str = "mq9") -> RuntimeConfig:
         oneshot_timeout_s=_as_float(merged.get("oneshot_timeout_s"), 90.0, 5.0, 600.0),
         oneshot_provider=str(merged.get("oneshot_provider") or "").strip(),
         oneshot_model=str(merged.get("oneshot_model") or "").strip(),
+        default_protocol=normalize_protocol(merged.get("default_protocol"), fallback=DEFAULT_PROTOCOL),
+        discovery_require_protocol=_as_bool(merged.get("discovery_require_protocol"), False),
     )
 
 
@@ -312,6 +330,12 @@ class MQ9HermesRuntime:
         user_mailbox = str(args.get("mailbox") or "").strip()
         description = str(args.get("description") or "").strip()
         tags = args.get("tags") if isinstance(args.get("tags"), list) else None
+        protocols = normalize_protocols(
+            args.get("protocols"),
+            default_protocol=cfg.default_protocol,
+        )
+        extra_metadata = args.get("metadata") if isinstance(args.get("metadata"), dict) else None
+        custom_card = args.get("agent_card") if isinstance(args.get("agent_card"), dict) else None
 
         with self._lock:
             known_mailbox = self._mailbox_address
@@ -328,12 +352,32 @@ class MQ9HermesRuntime:
                 if not mailbox:
                     mailbox = await self._ensure_mailbox(client, cfg.mailbox, cfg.mailbox_ttl)
 
-                card = self._build_agent_card(
-                    agent_name=agent_name,
-                    mailbox=mailbox,
-                    description=description,
-                    tags=tags,
-                )
+                if custom_card is not None:
+                    card = dict(custom_card)
+                    card["name"] = str(card.get("name") or agent_name)
+                    card["mailbox"] = str(card.get("mailbox") or f"mq9://broker/{mailbox}")
+                    card_protocols = normalize_protocols(
+                        card.get("protocols") or protocols,
+                        default_protocol=cfg.default_protocol,
+                    )
+                    card["protocols"] = card_protocols
+
+                    metadata = card.get("metadata")
+                    metadata_dict = metadata if isinstance(metadata, dict) else {}
+                    card["metadata"] = build_transport_metadata(
+                        mailbox=mailbox,
+                        protocols=card_protocols,
+                        extra_metadata=metadata_dict,
+                    )
+                else:
+                    card = self._build_agent_card(
+                        agent_name=agent_name,
+                        mailbox=mailbox,
+                        description=description,
+                        tags=tags,
+                        protocols=protocols,
+                        extra_metadata=extra_metadata,
+                    )
                 await client.register_agent(agent_card=card)
                 return {"mailbox": mailbox, "card": card}
 
@@ -413,6 +457,11 @@ class MQ9HermesRuntime:
 
         limit = _as_int(args.get("limit"), cfg.default_discover_limit, 1, 100)
         prefer_name = str(args.get("prefer_name") or "").strip() or None
+        protocol = str(args.get("protocol") or "").strip() or None
+        require_protocol = _as_bool(
+            args.get("require_protocol"),
+            cfg.discovery_require_protocol,
+        )
 
         async def _discover() -> dict[str, Any]:
             async with Mq9Client(cfg.nats_url) as client:
@@ -439,10 +488,23 @@ class MQ9HermesRuntime:
             if prefer_name:
                 candidates.sort(key=lambda it: 0 if it.get("name") == prefer_name else 1)
 
+            if protocol:
+                candidates = [
+                    item
+                    for item in candidates
+                    if agent_supports_protocol(
+                        item,
+                        protocol,
+                        require_declared=require_protocol,
+                    )
+                ]
+
             return {
                 "ok": True,
                 "query": query,
                 "limit": limit,
+                "protocol": protocol,
+                "require_protocol": require_protocol,
                 "count": len(candidates),
                 "agents": candidates,
             }
@@ -475,6 +537,16 @@ class MQ9HermesRuntime:
 
         query = str(args.get("query") or "").strip() or None
         prefer_name = str(args.get("prefer_name") or "").strip() or None
+        protocol = normalize_protocol(
+            args.get("protocol"),
+            fallback=cfg.default_protocol,
+        )
+        require_protocol = _as_bool(
+            args.get("require_protocol"),
+            cfg.discovery_require_protocol,
+        )
+        content_type = str(args.get("content_type") or "").strip() or None
+        context = args.get("context") if isinstance(args.get("context"), dict) else None
 
         async def _call() -> dict[str, Any]:
             selected_agent: dict[str, Any] | None = None
@@ -508,6 +580,16 @@ class MQ9HermesRuntime:
                         ]
                         candidates = self._dedupe_candidates(exact_fallback + candidates)
 
+                    candidates = [
+                        item
+                        for item in candidates
+                        if agent_supports_protocol(
+                            item,
+                            protocol,
+                            require_declared=require_protocol,
+                        )
+                    ]
+
                     if prefer_name:
                         candidates.sort(
                             key=lambda it: 0 if it.get("name") == prefer_name else 1,
@@ -532,6 +614,9 @@ class MQ9HermesRuntime:
                                 from_agent=from_agent,
                                 target_mailbox=mailbox,
                                 message=message,
+                                protocol=protocol,
+                                content_type=content_type,
+                                context=context,
                                 timeout_s=attempt_timeout,
                             )
                             break
@@ -555,12 +640,17 @@ class MQ9HermesRuntime:
                         from_agent=from_agent,
                         target_mailbox=mailbox,
                         message=message,
+                        protocol=protocol,
+                        content_type=content_type,
+                        context=context,
                         timeout_s=timeout_s,
                     )
 
             return {
                 "ok": True,
                 "from_agent": from_agent,
+                "protocol": protocol,
+                "require_protocol": require_protocol,
                 "target_mailbox": mailbox,
                 "selected_agent": selected_agent,
                 "attempted_targets": attempted_targets,
@@ -620,6 +710,11 @@ class MQ9HermesRuntime:
                         mailbox=mailbox,
                         description="",
                         tags=None,
+                        protocols=normalize_protocols(
+                            [cfg.default_protocol, "mq9"],
+                            default_protocol=cfg.default_protocol,
+                        ),
+                        extra_metadata=None,
                     )
                     await client.register_agent(agent_card=card)
                     with self._lock:
@@ -646,29 +741,31 @@ class MQ9HermesRuntime:
                         self._last_receive_ts = int(time.time())
 
                     body = message.parse_json()
-                    if not isinstance(body, dict):
+                    parsed = parse_call_envelope(body)
+                    if parsed is None:
                         return
-                    if body.get("type") != "mq9_call":
-                        return
-
-                    callback_mailbox = body.get("reply_to")
-                    correlation_id = body.get("correlation_id")
-                    if not callback_mailbox or not correlation_id:
-                        return
+                    callback_mailbox = parsed["callback_mailbox"]
+                    correlation_id = parsed["correlation_id"]
+                    protocol = parsed["protocol"]
+                    content_type = parsed["content_type"]
 
                     result_payload, call_ok = await self._handle_inbound_call(
                         cfg=cfg,
-                        correlation_id=str(correlation_id),
-                        payload=body.get("payload"),
+                        correlation_id=correlation_id,
+                        payload=parsed["payload"],
+                        protocol=protocol,
+                        content_type=content_type,
+                        context=parsed.get("context"),
                     )
-                    response = {
-                        "type": "mq9_call_reply",
-                        "ok": call_ok,
-                        "from": cfg.agent_name,
-                        "correlation_id": correlation_id,
-                        "result": result_payload,
-                        "ts": int(time.time()),
-                    }
+                    response = build_call_reply(
+                        from_agent=cfg.agent_name,
+                        correlation_id=correlation_id,
+                        protocol=protocol,
+                        content_type=content_type,
+                        ok=call_ok,
+                        result=result_payload,
+                    )
+                    response["ts"] = int(time.time())
 
                     await client.send_message(str(callback_mailbox), response)
                     with self._lock:
@@ -754,6 +851,7 @@ class MQ9HermesRuntime:
                 continue
             normalized = dict(item)
             normalized["_mailbox"] = mailbox
+            normalized["_protocols"] = extract_agent_protocols(normalized)
             candidates.append(normalized)
         return candidates
 
@@ -776,6 +874,8 @@ class MQ9HermesRuntime:
         mailbox: str,
         description: str,
         tags: list[str] | None,
+        protocols: list[str],
+        extra_metadata: dict[str, Any] | None,
     ) -> dict[str, Any]:
         desc = description.strip() or (
             "Hermes agent reachable via mq9 plugin. "
@@ -817,18 +917,24 @@ class MQ9HermesRuntime:
                 }
             )
 
+        normalized_protocols = normalize_protocols(
+            protocols,
+            default_protocol=self.current_config().default_protocol,
+        )
+        metadata = build_transport_metadata(
+            mailbox=mailbox,
+            protocols=normalized_protocols,
+            extra_metadata=extra_metadata,
+        )
+
         return {
             "name": agent_name,
             "mailbox": f"mq9://broker/{mailbox}",
             "description": desc,
             "tags": tag_list,
+            "protocols": normalized_protocols,
             "skills": skills,
-            "metadata": {
-                "mq9": {
-                    "mailbox": mailbox,
-                    "transport": "nats",
-                }
-            },
+            "metadata": metadata,
         }
 
     async def _handle_inbound_call(
@@ -837,16 +943,22 @@ class MQ9HermesRuntime:
         cfg: RuntimeConfig,
         correlation_id: str,
         payload: Any,
+        protocol: str,
+        content_type: str | None,
+        context: dict[str, Any] | None,
     ) -> tuple[dict[str, Any], bool]:
         if cfg.passive_execute_mode != "oneshot":
             return (
                 {
                     "mode": "minimal",
+                    "protocol": protocol,
+                    "content_type": content_type,
                     "summary": (
                         "mq9 passive serve handled this task in minimal mode. "
                         "Enable passive_execute_mode=oneshot to execute with Hermes."
                     ),
                     "request": payload,
+                    "context": context,
                 },
                 True,
             )
@@ -857,13 +969,19 @@ class MQ9HermesRuntime:
                 cfg,
                 correlation_id,
                 payload,
+                protocol,
+                content_type,
+                context,
             )
             return (
                 {
                     "mode": "oneshot",
+                    "protocol": protocol,
+                    "content_type": content_type,
                     "summary": "Hermes oneshot executor finished remote task.",
                     "answer": answer,
                     "request": payload,
+                    "context": context,
                 },
                 True,
             )
@@ -872,9 +990,12 @@ class MQ9HermesRuntime:
             return (
                 {
                     "mode": "oneshot",
+                    "protocol": protocol,
+                    "content_type": content_type,
                     "summary": "Hermes oneshot executor failed; returning error payload.",
                     "error": str(exc),
                     "request": payload,
+                    "context": context,
                 },
                 False,
             )
@@ -884,8 +1005,18 @@ class MQ9HermesRuntime:
         cfg: RuntimeConfig,
         correlation_id: str,
         payload: Any,
+        protocol: str,
+        content_type: str | None,
+        context: dict[str, Any] | None,
     ) -> str:
-        prompt = self._build_oneshot_prompt(cfg.agent_name, correlation_id, payload)
+        prompt = self._build_oneshot_prompt(
+            cfg.agent_name,
+            correlation_id,
+            payload,
+            protocol=protocol,
+            content_type=content_type,
+            context=context,
+        )
         hermes_bin = self._resolve_hermes_binary()
 
         env = dict(os.environ)
@@ -964,15 +1095,23 @@ class MQ9HermesRuntime:
         agent_name: str,
         correlation_id: str,
         payload: Any,
+        *,
+        protocol: str,
+        content_type: str | None,
+        context: dict[str, Any] | None,
     ) -> str:
         task_text = cls._extract_task_text(payload)
         payload_text = json.dumps(payload, ensure_ascii=False, indent=2, default=str)
+        context_text = json.dumps(context or {}, ensure_ascii=False, indent=2, default=str)
         return (
             f"You are remote Hermes agent '{agent_name}'. "
             "Complete the incoming task and return only the final answer. "
             "Do not call external tools.\n\n"
             f"Correlation ID: {correlation_id}\n"
+            f"Protocol: {protocol}\n"
+            f"Content-Type: {content_type or '(not provided)'}\n"
             f"Task:\n{task_text}\n\n"
+            f"Context JSON:\n{context_text}\n\n"
             f"Payload JSON:\n{payload_text}\n"
         )
 

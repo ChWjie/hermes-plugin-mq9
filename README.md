@@ -1,14 +1,26 @@
 # hermes-plugin-mq9
 
-`mq9` transport plugin for Hermes. This standalone package adds cross-agent communication over RobustMQ mq9:
+`mq9` transport plugin for Hermes. This standalone package adds cross-agent communication over RobustMQ mq9 with a protocol-agnostic core:
 
 - `mq9_register_self`
 - `mq9_unregister_self`
 - `mq9_discover`
 - `mq9_call`
 - `mq9_status`
+- `a2a_register_self`
+- `a2a_discover`
+- `a2a_call`
 
 It also runs a passive inbox server in background hooks (`on_session_start`/`on_session_finalize`) so Hermes agents can receive and reply to mq9 calls.
+
+## RobustMQ source of truth
+
+mq9 core does not live here. The Rust implementation stays in the official RobustMQ repository:
+
+- [robustmq/robustmq](https://github.com/robustmq/robustmq)
+- mq9 docs: [96](https://robustmq.com/zh/Blogs/96), [99](https://robustmq.com/zh/Blogs/99), [101](https://robustmq.com/zh/Blogs/101), [102](https://robustmq.com/zh/Blogs/102), [103](https://robustmq.com/zh/Blogs/103)
+
+RobustMQ is the broker/runtime layer. This repository is the Hermes-facing adapter on top of it.
 
 ## Why standalone
 
@@ -18,6 +30,8 @@ This repository is that standalone package.
 
 ## Scope
 
+- Generic transport/discovery substrate: mq9 carries opaque protocol payloads.
+- A2A-first adapter tools: `a2a_discover`/`a2a_call` wrappers on mq9 substrate.
 - Phase 1 (client): register/discover/call
 - Phase 2 minimal (passive serve): receive + reply (`minimal` mode default)
 - Optional `oneshot` mode: execute delegated task with `hermes -z` before replying
@@ -63,6 +77,8 @@ plugins:
       oneshot_model: deepseek-chat
       default_discover_limit: 10
       default_call_timeout_s: 25
+      default_protocol: a2a
+      discovery_require_protocol: false
 ```
 
 Env vars (higher priority):
@@ -76,6 +92,8 @@ Env vars (higher priority):
 - `HERMES_MQ9_ONESHOT_PROVIDER`
 - `HERMES_MQ9_ONESHOT_MODEL`
 - `HERMES_MQ9_ONESHOT_TIMEOUT`
+- `HERMES_MQ9_DEFAULT_PROTOCOL`
+- `HERMES_MQ9_DISCOVERY_REQUIRE_PROTOCOL`
 
 Note:
 - On the upstream snapshot validated on **2026-05-14** (Hermes commit `524490a`), `hermes plugins list/enable` focuses on directory plugins.
@@ -92,6 +110,72 @@ PY
 ```
 
 Expected output includes `mq9`.
+
+## A2A usage in Hermes
+
+Use the A2A wrappers when you want Hermes prompts and tool plans to stay aligned with A2A semantics while mq9 handles transport/discovery.
+
+- `a2a_register_self`: register this Hermes instance as A2A-capable.
+- `a2a_discover`: discover A2A-capable agents.
+- `a2a_call`: send A2A payload over mq9 and wait for reply.
+
+Example tool args:
+
+```json
+{
+  "query": "Python HTTP server agent",
+  "prefer_name": "hermes-b",
+  "limit": 5
+}
+```
+
+```json
+{
+  "query": "Python HTTP server agent",
+  "prefer_name": "hermes-b",
+  "message": {
+    "task_id": "a2a-task-001",
+    "instruction": "Write a minimal Python HTTP server with /health",
+    "expect": "runnable code + run command"
+  },
+  "timeout_s": 45
+}
+```
+
+## OpenClaw near-zero migration
+
+This repo includes an OpenClaw-compatible bundle at:
+
+- `openclaw-bundle/mq9-a2a-bundle/`
+
+The bundle contributes `.mcp.json` so OpenClaw can consume RobustMQ broker MCP tools directly (`mq9_create_mailbox`, `mq9_send_message`, `mq9_discover_agents`, etc.) without rewriting mq9 transport logic in TypeScript.
+
+Match the endpoint to your RobustMQ broker config:
+
+- `config/server.toml` -> `http://127.0.0.1:8080/mcp`
+- `config/server-poc-isolated.toml` -> `http://127.0.0.1:39080/mcp`
+
+Install locally:
+
+```bash
+openclaw plugins install ./openclaw-bundle/mq9-a2a-bundle
+openclaw plugins enable mq9-a2a-bundle
+openclaw gateway restart
+openclaw plugins inspect mq9-a2a-bundle --runtime --json
+```
+
+Set broker MCP endpoint in bundle config:
+
+```json
+{
+  "mcpServers": {
+    "mq9": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://127.0.0.1:39080/mcp"]
+    }
+  }
+}
+```
 
 ## Local E2E (standalone entrypoint mode)
 
@@ -186,3 +270,9 @@ RobustMQ mq9 core stays in RobustMQ repo (Rust), mainly under:
 
 - `src/mq9-core/`
 - `src/nats-broker/src/mq9/`
+
+## User flow
+
+For a Chinese, end-to-end setup guide with Hermes + OpenClaw configs and test commands, see:
+
+- [examples/hermes-openclaw-fullchain/README.md](examples/hermes-openclaw-fullchain/README.md)

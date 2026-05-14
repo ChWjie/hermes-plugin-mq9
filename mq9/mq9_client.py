@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 from urllib.parse import urlparse
 
+from .protocol_bridge import build_call_envelope, normalize_protocol
+
 DEFAULT_NATS_URL = "nats://127.0.0.1:4222"
 
 
@@ -295,18 +297,23 @@ class Mq9Client:
         from_agent: str,
         target_mailbox: str,
         message: dict[str, Any],
+        protocol: str = "a2a",
+        content_type: str | None = None,
+        context: dict[str, Any] | None = None,
         timeout_s: float = 20.0,
     ) -> CallResult:
         callback = await self.create_mailbox(ttl=max(300, int(timeout_s) + 120))
         correlation_id = uuid.uuid4().hex
-        envelope = {
-            "type": "mq9_call",
-            "from": from_agent,
-            "reply_to": callback.mail_address,
-            "correlation_id": correlation_id,
-            "payload": message,
-            "ts": int(time.time()),
-        }
+        envelope = build_call_envelope(
+            from_agent=from_agent,
+            correlation_id=correlation_id,
+            reply_to=callback.mail_address,
+            payload=message,
+            protocol=protocol,
+            content_type=content_type,
+            context=context,
+        )
+        envelope["ts"] = int(time.time())
         await self.send_message(target_mailbox, envelope)
 
         group = f"mq9-call-{correlation_id[:10]}"
@@ -333,6 +340,8 @@ class Mq9Client:
                 )
                 await self.ack_message(callback.mail_address, group, msg.msg_id)
                 if is_match:
+                    if isinstance(body, dict) and not body.get("protocol"):
+                        body["protocol"] = normalize_protocol(protocol)
                     return CallResult(
                         correlation_id=correlation_id,
                         callback_mailbox=callback.mail_address,

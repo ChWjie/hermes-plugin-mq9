@@ -25,16 +25,48 @@ from typing import Any
 from urllib.parse import urlparse
 
 
+def _is_robustmq_root(path: Path) -> bool:
+    return (path / "Cargo.toml").exists() and (path / "config").is_dir()
+
+
+def _detect_robustmq_root(plugin_dir: Path) -> Path:
+    env_path = os.environ.get("ROBUSTMQ_REPO", "").strip()
+    candidates: list[Path] = []
+    if env_path:
+        candidates.append(Path(env_path).expanduser().resolve())
+    candidates.extend(
+        [
+            plugin_dir.parent / "08_RobustMQ_work",
+            plugin_dir.parent / "08_RobustMQ",
+            Path.cwd(),
+        ]
+    )
+    for candidate in candidates:
+        if _is_robustmq_root(candidate):
+            return candidate
+    # Keep a deterministic fallback for error messages and explicit overrides.
+    return Path.cwd()
+
+
 def parse_args() -> argparse.Namespace:
-    root = Path(__file__).resolve().parents[2]
     plugin_dir = Path(__file__).resolve().parent
+    root = _detect_robustmq_root(plugin_dir)
+    default_conf = root / "config" / "server-poc-isolated.toml"
+    if not default_conf.exists():
+        default_conf = root / "config" / "server.toml"
     venv_python = plugin_dir / ".venv-hermes" / "bin" / "python"
     venv_hermes = plugin_dir / ".venv-hermes" / "bin" / "hermes"
 
     parser = argparse.ArgumentParser(description="Run Hermes mq9 phase-4 e2e test")
     parser.add_argument("--mode", choices=["toolcall", "llm"], default="toolcall")
+    parser.add_argument(
+        "--tool-family",
+        choices=["mq9", "a2a"],
+        default="mq9",
+        help="Which Hermes tools to use for discover/call flows.",
+    )
     parser.add_argument("--nats-url", default="nats://127.0.0.1:45222")
-    parser.add_argument("--broker-conf", default=str(root / "config" / "server-poc-isolated.toml"))
+    parser.add_argument("--broker-conf", default=str(default_conf))
     parser.add_argument("--workdir", default=str(root))
     parser.add_argument("--plugin-dir", default=str(plugin_dir))
     parser.add_argument(
@@ -285,6 +317,8 @@ def start_hermes_b(
         mailbox_b,
         "--duration",
         str(args.server_duration),
+        "--tool-family",
+        args.tool_family,
     ]
     log(f"starting Hermes-B server: {' '.join(cmd)}")
     process = subprocess.Popen(
@@ -370,6 +404,8 @@ def run_toolcall_mode(
         "Please write a minimal Python HTTP server with one GET /health endpoint and how to run it.",
         "--timeout",
         str(args.call_timeout),
+        "--tool-family",
+        args.tool_family,
     ]
     env = os.environ.copy()
     env["HOME"] = str(home_a)
@@ -430,10 +466,12 @@ def run_llm_mode(
         else:
             raise FileNotFoundError(f"hermes binary not found: {args.hermes_bin}")
 
+    discover_tool = "a2a_discover" if args.tool_family == "a2a" else "mq9_discover"
+    call_tool = "a2a_call" if args.tool_family == "a2a" else "mq9_call"
     prompt = (
         "你是 Hermes-A。请完成这个任务：找个会写 Python 的 agent 帮我写个 HTTP server。"
-        f"要求：先调用 mq9_discover，query='Python HTTP server'，prefer_name='{agent_b}'；"
-        "再调用 mq9_call 把任务发给发现到的目标；"
+        f"要求：先调用 {discover_tool}，query='Python HTTP server'，prefer_name='{agent_b}'；"
+        f"再调用 {call_tool} 把任务发给发现到的目标；"
         "最后把对方返回的代码和运行方法整理成中文答复。"
     )
 

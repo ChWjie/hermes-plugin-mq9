@@ -1,0 +1,9 @@
+{
+  "name": "mq9-a2a-bundle",
+  "description": "OpenClaw bundle that wires RobustMQ mq9 MCP transport for A2A-oriented agent collaboration.",
+  "version": "0.3.0",
+  "skills": [
+    "skills"
+  ],
+  "mcpServers": ".mcp.json"
+}

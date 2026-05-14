@@ -18,6 +18,10 @@ In-tree PR path under `NousResearch/hermes-agent/plugins/` is intentionally not 
 - `mq9_status`
 - Passive inbox serve loop with lifecycle hooks
 
+Full-chain guide:
+
+- [`examples/hermes-openclaw-fullchain/README.md`](examples/hermes-openclaw-fullchain/README.md)
+
 ## Install path for ecosystem users
 
 ```bash

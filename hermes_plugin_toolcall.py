@@ -33,6 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--target-mailbox", default="")
     parser.add_argument("--task", default="Please write a Python HTTP server with one GET endpoint.")
     parser.add_argument("--timeout", type=float, default=25.0)
+    parser.add_argument("--tool-family", choices=["mq9", "a2a"], default="mq9")
 
     parser.add_argument("--duration", type=float, default=0.0, help="server mode only")
     return parser.parse_args()
@@ -66,6 +67,10 @@ def main() -> int:
 
     discover_plugins(force=True)
 
+    register_tool = "a2a_register_self" if args.tool_family == "a2a" else "mq9_register_self"
+    discover_tool = "a2a_discover" if args.tool_family == "a2a" else "mq9_discover"
+    call_tool = "a2a_call" if args.tool_family == "a2a" else "mq9_call"
+
     if args.mode == "status":
         print(json.dumps(_dispatch("mq9_status", {}), ensure_ascii=False, indent=2))
         return 0
@@ -75,7 +80,7 @@ def main() -> int:
         print(
             json.dumps(
                 _dispatch(
-                    "mq9_register_self",
+                    register_tool,
                     {
                         "agent_name": args.agent_name,
                         "mailbox": args.mailbox,
@@ -123,7 +128,7 @@ def main() -> int:
         "limit": 10,
         "prefer_name": args.prefer_name,
     }
-    print(json.dumps(_dispatch("mq9_discover", discover_payload), ensure_ascii=False, indent=2))
+    print(json.dumps(_dispatch(discover_tool, discover_payload), ensure_ascii=False, indent=2))
 
     call_payload = {
         "target_mailbox": args.target_mailbox,
@@ -138,7 +143,7 @@ def main() -> int:
         "timeout_s": args.timeout,
     }
     print("[hermes-plugin-client] call:")
-    print(json.dumps(_dispatch("mq9_call", call_payload), ensure_ascii=False, indent=2))
+    print(json.dumps(_dispatch(call_tool, call_payload), ensure_ascii=False, indent=2))
 
     return 0
 

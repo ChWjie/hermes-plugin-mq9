@@ -90,3 +90,68 @@ def mq9_status(args: dict[str, Any], **kwargs: Any) -> str:
     except Exception as exc:
         logger.exception("mq9_status failed: %s", exc)
         return _tool_error(f"mq9_status failed: {exc}")
+
+
+def a2a_register_self(args: dict[str, Any], **kwargs: Any) -> str:
+    del kwargs
+    runtime = _require_runtime()
+    merged = dict(args or {})
+    raw_protocols = merged.get("protocols")
+    if isinstance(raw_protocols, list):
+        protocols = [str(item).strip() for item in raw_protocols if str(item).strip()]
+    elif raw_protocols:
+        protocols = [str(raw_protocols).strip()]
+    else:
+        protocols = []
+    if "a2a" not in protocols:
+        protocols.append("a2a")
+    merged["protocols"] = protocols
+    try:
+        result = runtime.register_self(merged)
+        return _tool_result(result)
+    except Exception as exc:
+        logger.exception("a2a_register_self failed: %s", exc)
+        return _tool_error(f"a2a_register_self failed: {exc}")
+
+
+def a2a_discover(args: dict[str, Any], **kwargs: Any) -> str:
+    del kwargs
+    runtime = _require_runtime()
+    merged = dict(args or {})
+    merged["protocol"] = "a2a"
+    merged["require_protocol"] = _as_bool_like(merged.get("require_protocol"), True)
+    try:
+        result = runtime.discover(merged)
+        return _tool_result(result)
+    except Exception as exc:
+        logger.exception("a2a_discover failed: %s", exc)
+        return _tool_error(f"a2a_discover failed: {exc}")
+
+
+def a2a_call(args: dict[str, Any], **kwargs: Any) -> str:
+    del kwargs
+    runtime = _require_runtime()
+    merged = dict(args or {})
+    merged["protocol"] = "a2a"
+    merged["require_protocol"] = _as_bool_like(merged.get("require_protocol"), True)
+    if "content_type" not in merged:
+        merged["content_type"] = "application/json"
+    try:
+        result = runtime.call(merged)
+        return _tool_result(result)
+    except Exception as exc:
+        logger.exception("a2a_call failed: %s", exc)
+        return _tool_error(f"a2a_call failed: {exc}")
+
+
+def _as_bool_like(value: Any, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    return default

@@ -20,6 +20,9 @@ _TOOLS: tuple[tuple[str, dict[str, Any], Any, str], ...] = (
     ("mq9_discover", schemas.MQ9_DISCOVER, tools.mq9_discover, "🔎"),
     ("mq9_call", schemas.MQ9_CALL, tools.mq9_call, "📨"),
     ("mq9_status", schemas.MQ9_STATUS, tools.mq9_status, "📊"),
+    ("a2a_register_self", schemas.A2A_REGISTER_SELF, tools.a2a_register_self, "🧭"),
+    ("a2a_discover", schemas.A2A_DISCOVER, tools.a2a_discover, "🔭"),
+    ("a2a_call", schemas.A2A_CALL, tools.a2a_call, "📡"),
 )
 
 
