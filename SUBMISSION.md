@@ -5,7 +5,7 @@ Last updated: 2026-05-14
 ## Package
 
 - Repository: `https://github.com/ChWjie/hermes-plugin-mq9`
-- Release: `v0.2.0`
+- Release: `v0.2.1`
 - Python package: `hermes-plugin-mq9`
 - Entry point group: `hermes_agent.plugins`
 - Entry point name: `mq9`
