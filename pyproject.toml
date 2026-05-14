@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling>=1.24.2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hermes-plugin-mq9"
+version = "0.2.0"
+description = "mq9 transport plugin for Hermes: register, discover, call, and passive inbox serving"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+authors = [
+  { name = "RobustMQ" }
+]
+keywords = ["hermes", "plugin", "mq9", "robustmq", "agent"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+  "Topic :: Software Development :: Libraries :: Python Modules"
+]
+dependencies = []
+
+[project.entry-points."hermes_agent.plugins"]
+mq9 = "mq9"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mq9"]
+

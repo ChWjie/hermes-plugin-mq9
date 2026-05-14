@@ -1,0 +1,24 @@
+{
+  "matrix_version": "mq9-b2-matrix-v1",
+  "default_contract": "contracts/hermes_foundation_v1.json",
+  "suites": {
+    "p0": {
+      "goal": "Hermes plugin foundation gate",
+      "sdks": ["python"],
+      "cases": [
+        "mailbox.create_send_fetch_ack",
+        "message.priority_header",
+        "agent.register_discover"
+      ]
+    },
+    "p1": {
+      "goal": "Cross-language conformance expansion",
+      "sdks": ["python", "go"],
+      "cases": [
+        "mailbox.create_send_fetch_ack",
+        "message.priority_header",
+        "agent.register_discover"
+      ]
+    }
+  }
+}

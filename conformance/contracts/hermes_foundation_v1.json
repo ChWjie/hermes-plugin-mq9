@@ -1,0 +1,28 @@
+{
+  "contract_version": "mq9-hermes-foundation-v1",
+  "description": "Conformance contract for mq9 SDK behavior required by Hermes plugin foundation.",
+  "cases": [
+    {
+      "id": "mailbox.create_send_fetch_ack",
+      "title": "Mailbox create/send/fetch/ack roundtrip",
+      "required_ops": ["create_mailbox", "send_message", "fetch_messages", "ack_message"],
+      "suites": ["p0", "p1"]
+    },
+    {
+      "id": "message.priority_header",
+      "title": "Priority header consistency",
+      "required_ops": ["create_mailbox", "send_message", "fetch_messages"],
+      "suites": ["p0", "p1"]
+    },
+    {
+      "id": "agent.register_discover",
+      "title": "Agent register/discover contract",
+      "required_ops": ["register_agent", "discover_agents"],
+      "suites": ["p0", "p1"]
+    }
+  ],
+  "sdk_matrix": {
+    "p0": ["python"],
+    "p1": ["python", "go"]
+  }
+}
