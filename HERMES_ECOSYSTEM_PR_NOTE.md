@@ -1,107 +1,45 @@
-# [Plugin] mq9 transport plugin for Hermes
+# mq9 Hermes Plugin Ecosystem Note
 
-## Summary
+## Status
 
-This PR introduces a production-usable Hermes plugin `mq9` for cross-agent discovery and RPC-style task calls over RobustMQ mq9.
+This integration is published as a standalone plugin repository:
 
-Implemented tools:
+- Repo: `https://github.com/ChWjie/hermes-plugin-mq9`
+- Release: `v0.2.0`
+
+In-tree PR path under `NousResearch/hermes-agent/plugins/` is intentionally not used, following Hermes maintainer guidance in `CONTRIBUTING.md`.
+
+## What users get
 
 - `mq9_register_self`
 - `mq9_unregister_self`
 - `mq9_discover`
 - `mq9_call`
 - `mq9_status`
+- Passive inbox serve loop with lifecycle hooks
 
-Implemented hooks:
-
-- `on_session_start`
-- `on_session_reset`
-- `on_session_finalize`
-
-## Key Improvements in This Version
-
-1. Lifecycle-safe registration cleanup
-
-- Runtime now tracks registered agent names.
-- Best-effort unregister on `on_session_finalize`.
-- Best-effort unregister on process exit (`atexit`) to reduce stale discover records.
-- Added explicit manual cleanup tool: `mq9_unregister_self`.
-
-2. Stable mailbox semantics
-
-- Mailbox creation uses `idempotent=true` by default.
-- Avoids mailbox name churn across restart/re-registration.
-
-3. Reliability hardening
-
-- Bounded retries for transient request failures in Python SDK.
-- Improved call attempt diagnostics (timeout and protocol-level errors).
-- Toolcall E2E defaults to `minimal` passive mode (no model key required).
-
-4. Quality gates and evidence
-
-- Unit tests for client/runtime.
-- Contract-driven conformance suite (B2 foundation).
-- Hermes-A/Hermes-B end-to-end flow validation.
-
-## Validation
-
-Executed on 2026-05-14:
-
-1. Unit tests
+## Install path for ecosystem users
 
 ```bash
-python -m unittest discover -s example/hermes-plugin-mq9/tests -p 'test_*.py' -v
+pip install git+https://github.com/NousResearch/hermes-agent.git
+pip install git+https://github.com/ChWjie/hermes-plugin-mq9.git
 ```
 
-Result: `7 passed`
+Then enable in `~/.hermes/config.yaml`:
 
-2. Conformance (Python p0)
-
-```bash
-python example/hermes-plugin-mq9/conformance/run_conformance.py \
-  --sdk python \
-  --suite p0 \
-  --nats-url nats://127.0.0.1:46222 \
-  --json-out /private/tmp/mq9_conformance_python_p0_20260514.json
+```yaml
+plugins:
+  enabled:
+    - mq9
 ```
 
-Result: `3/3 passed`
+## Validation snapshot (2026-05-14)
 
-3. E2E toolcall mode
+- Unit: `7/7` pass
+- Conformance (python p0): `3/3` pass
+- Standalone entrypoint load: pass (`source='entrypoint'`)
+- Standalone toolcall e2e: pass (discover + call + reply + unregister)
 
-```bash
-python example/hermes-plugin-mq9/run_phase4_e2e.py \
-  --mode toolcall \
-  --nats-url nats://127.0.0.1:46222 \
-  --broker-conf /private/tmp/server-mq9-hermes-plugin.toml
-```
+## Compatibility note
 
-Result: success = `true`
-
-4. E2E llm mode
-
-```bash
-python example/hermes-plugin-mq9/run_phase4_e2e.py \
-  --mode llm \
-  --nats-url nats://127.0.0.1:46222 \
-  --broker-conf /private/tmp/server-mq9-hermes-plugin.toml \
-  --provider deepseek \
-  --model deepseek-chat
-```
-
-Result: success = `true`
-
-## Installation
-
-```bash
-mkdir -p ~/.hermes/plugins
-cp -R example/hermes-plugin-mq9/mq9 ~/.hermes/plugins/mq9
-hermes plugins enable mq9
-```
-
-## Notes
-
-- `minimal` mode is safe default and model-key free.
-- `oneshot` mode is supported but requires provider/model/API key.
-- Go conformance runner is reserved in matrix but not implemented in this PR.
+Validated upstream Hermes snapshot (commit `524490a`) has CLI list/enable focused on directory plugins. Pip entrypoint plugin remains fully loadable when `mq9` is included in `plugins.enabled`.

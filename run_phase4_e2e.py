@@ -37,6 +37,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--broker-conf", default=str(root / "config" / "server-poc-isolated.toml"))
     parser.add_argument("--workdir", default=str(root))
     parser.add_argument("--plugin-dir", default=str(plugin_dir))
+    parser.add_argument(
+        "--plugin-source",
+        choices=["directory", "entrypoint"],
+        default="directory",
+        help=(
+            "directory: copy mq9/ into each Hermes home; "
+            "entrypoint: require pip-installed hermes-plugin-mq9 entrypoint"
+        ),
+    )
     parser.add_argument("--home-root", default="")
     parser.add_argument("--hermes-python", default=str(venv_python))
     parser.add_argument("--hermes-bin", default=str(venv_hermes))
@@ -144,18 +153,18 @@ def create_homes(
     else:
         base = Path(tempfile.mkdtemp(prefix="mq9-hermes-e2e.", dir="/private/tmp"))
 
-    plugin_src = Path(args.plugin_dir).resolve() / "mq9"
-    if not plugin_src.exists():
-        raise FileNotFoundError(f"mq9 plugin directory not found: {plugin_src}")
-
     home_a = base / "home_a"
     home_b = base / "home_b"
     for home in (home_a, home_b):
-        (home / "plugins").mkdir(parents=True, exist_ok=True)
-        dst = home / "plugins" / "mq9"
-        if dst.exists():
-            shutil.rmtree(dst)
-        shutil.copytree(plugin_src, dst)
+        if args.plugin_source == "directory":
+            plugin_src = Path(args.plugin_dir).resolve() / "mq9"
+            if not plugin_src.exists():
+                raise FileNotFoundError(f"mq9 plugin directory not found: {plugin_src}")
+            (home / "plugins").mkdir(parents=True, exist_ok=True)
+            dst = home / "plugins" / "mq9"
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(plugin_src, dst)
 
     cfg_a = make_home_config(args.nats_url, "minimal", args.provider, args.model)
     cfg_b = make_home_config(args.nats_url, b_execute_mode, args.provider, args.model)
@@ -506,6 +515,30 @@ def cleanup_artifacts(base: Path) -> None:
         shutil.rmtree(base, ignore_errors=True)
 
 
+def verify_entrypoint_plugin(args: argparse.Namespace) -> None:
+    code = (
+        "import importlib.metadata as md\n"
+        "eps = md.entry_points()\n"
+        "group = eps.select(group='hermes_agent.plugins') if hasattr(eps, 'select') else eps.get('hermes_agent.plugins', [])\n"
+        "names = {ep.name for ep in group}\n"
+        "print('mq9' in names)\n"
+    )
+    run = subprocess.run(
+        [args.hermes_python, "-c", code],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    found = "true" in (run.stdout or "").strip().lower()
+    if run.returncode != 0 or not found:
+        details = (run.stdout or "") + ("\n" + run.stderr if run.stderr else "")
+        raise RuntimeError(
+            "plugin-source=entrypoint requires pip-installed hermes-plugin-mq9 "
+            "entry point 'mq9' in group hermes_agent.plugins.\n"
+            f"details:\n{details}"
+        )
+
+
 def run() -> int:
     args = parse_args()
     api_key = resolve_api_key(args)
@@ -520,6 +553,9 @@ def run() -> int:
     mailbox_b = f"hermes.b.e2e.inbox.{ts}"
 
     try:
+        if args.plugin_source == "entrypoint":
+            verify_entrypoint_plugin(args)
+
         if args.server_execute_mode == "auto":
             b_mode = "oneshot" if args.mode == "llm" else "minimal"
         else:

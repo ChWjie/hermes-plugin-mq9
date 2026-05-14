@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hermes-plugin-mq9"
-version = "0.2.0"
+version = "0.2.1"
 description = "mq9 transport plugin for Hermes: register, discover, call, and passive inbox serving"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -27,4 +27,3 @@ mq9 = "mq9"
 
 [tool.hatch.build.targets.wheel]
 packages = ["mq9"]
-

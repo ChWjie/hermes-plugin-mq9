@@ -1,70 +1,56 @@
-# mq9 Hermes Plugin (Phase 3 Minimal)
+# hermes-plugin-mq9
 
-This folder contains a minimal Hermes plugin that bridges Hermes to mq9.
+`mq9` transport plugin for Hermes. This standalone package adds cross-agent communication over RobustMQ mq9:
 
-Current scope:
-- `mq9_register_self`: register current Hermes agent card into mq9 registry
-- `mq9_unregister_self`: unregister current Hermes agent from mq9 registry
-- `mq9_discover`: discover remote agents by query
-- `mq9_call`: send a call envelope and wait for callback reply
-- `mq9_status`: inspect runtime/mailbox/registration status
-- Passive inbox serve loop:
-  - `passive_execute_mode=minimal` (default): structured placeholder reply
-  - `passive_execute_mode=oneshot`: execute inbound task with `hermes -z` and reply with real answer
+- `mq9_register_self`
+- `mq9_unregister_self`
+- `mq9_discover`
+- `mq9_call`
+- `mq9_status`
 
-## Directory
+It also runs a passive inbox server in background hooks (`on_session_start`/`on_session_finalize`) so Hermes agents can receive and reply to mq9 calls.
 
-```text
-example/hermes-plugin-mq9/
-├── hermes_plugin_toolcall.py
-├── demo_runtime_server.py
-├── demo_runtime_caller.py
-├── run_phase4_e2e.py
-└── mq9/
-    ├── __init__.py
-    ├── mq9_client.py
-    ├── plugin.yaml
-    ├── runtime.py
-    ├── schemas.py
-    └── tools.py
-```
+## Why standalone
 
-## Install into Hermes
+Per Hermes `CONTRIBUTING.md`, new plugin integrations should be published as standalone plugin repos/packages instead of submitting new in-tree plugins under `plugins/`.
+
+This repository is that standalone package.
+
+## Scope
+
+- Phase 1 (client): register/discover/call
+- Phase 2 minimal (passive serve): receive + reply (`minimal` mode default)
+- Optional `oneshot` mode: execute delegated task with `hermes -z` before replying
+
+## Install
+
+1. Install Hermes (official repo):
 
 ```bash
-mkdir -p ~/.hermes/plugins
-cp -R example/hermes-plugin-mq9/mq9 ~/.hermes/plugins/mq9
+pip install git+https://github.com/NousResearch/hermes-agent.git
 ```
 
-Enable plugin:
+2. Install mq9 plugin (this repo):
 
 ```bash
-hermes plugins enable mq9
+pip install git+https://github.com/ChWjie/hermes-plugin-mq9.git
 ```
 
-Or edit `~/.hermes/config.yaml`:
+3. Enable plugin in `~/.hermes/config.yaml`:
 
 ```yaml
 plugins:
   enabled:
     - mq9
-```
-
-## Configure mq9 runtime
-
-Recommended (new style):
-
-```yaml
-plugins:
   entries:
     mq9:
       nats_url: "nats://127.0.0.1:45222"
-      agent_name: "hermes-b"
-      mailbox: "hermes.b.inbox"
+      agent_name: "hermes-a"
+      mailbox: "hermes.a.inbox"
       mailbox_ttl: 86400
       auto_register: true
       passive_serve: true
-      passive_execute_mode: minimal   # or oneshot
+      passive_execute_mode: minimal   # minimal | oneshot
       oneshot_timeout_s: 90
       oneshot_provider: deepseek
       oneshot_model: deepseek-chat
@@ -72,151 +58,124 @@ plugins:
       default_call_timeout_s: 25
 ```
 
-Compatibility fallback (also supported):
+Env vars (higher priority):
 
-```yaml
-mq9:
-  nats_url: "nats://127.0.0.1:45222"
-  agent_name: "hermes-b"
-  mailbox: "hermes.b.inbox"
-```
-
-Env override (highest priority):
 - `HERMES_MQ9_NATS_URL`
 - `HERMES_MQ9_AGENT_NAME`
 - `HERMES_MQ9_MAILBOX`
 - `HERMES_MQ9_AUTO_REGISTER`
 - `HERMES_MQ9_PASSIVE_SERVE`
-- `HERMES_MQ9_PASSIVE_EXECUTE_MODE` (`minimal` / `oneshot`)
+- `HERMES_MQ9_PASSIVE_EXECUTE_MODE`
 - `HERMES_MQ9_ONESHOT_PROVIDER`
 - `HERMES_MQ9_ONESHOT_MODEL`
 - `HERMES_MQ9_ONESHOT_TIMEOUT`
 
-## Validate quickly
+Note:
+- In the upstream snapshot we validated on **2026-05-14** (Hermes commit `524490a`), `hermes plugins list/enable` scans directory plugins only.
+- Pip entrypoint plugins still load correctly at runtime when added in `plugins.enabled`.
 
-1. Start RobustMQ broker (isolated port suggested):
+## Quick check (entrypoint installed)
+
+```bash
+python - <<'PY'
+import importlib.metadata as md
+entries = md.entry_points().select(group='hermes_agent.plugins')
+print([e.name for e in entries])
+PY
+```
+
+Expected output includes `mq9`.
+
+## Local E2E (standalone entrypoint mode)
+
+1. Start RobustMQ broker (from your RobustMQ repo):
 
 ```bash
 cargo run --package cmd --bin broker-server -- --conf config/server-poc-isolated.toml
 ```
 
-2. Start Hermes with plugin enabled and run:
-
-- `mq9_register_self`
-- `mq9_status`
-- `mq9_discover` with a known query
-- `mq9_call` to a mailbox
-- `mq9_unregister_self` to clean registry record
-
-## One-Command Phase-4 E2E
-
-Use `run_phase4_e2e.py` to validate Hermes-A/Hermes-B end-to-end flow.
-
-- `toolcall` mode: no LLM key required, validates mq9 discover/call plumbing.
-- `llm` mode: Hermes-A uses natural-language prompt and actually calls `mq9_discover` + `mq9_call`.
-- Server execute mode defaults:
-  - `toolcall` -> `minimal`
-  - `llm` -> `oneshot`
-
-Toolcall mode:
+2. Pick one run id and run `Hermes-B` passive server:
 
 ```bash
-source example/hermes-plugin-mq9/.venv-hermes/bin/activate
-python example/hermes-plugin-mq9/run_phase4_e2e.py --mode toolcall
-```
-
-LLM mode:
-
-```bash
-source example/hermes-plugin-mq9/.venv-hermes/bin/activate
-python example/hermes-plugin-mq9/run_phase4_e2e.py \
-  --mode llm \
-  --api-key "$DEEPSEEK_API_KEY"
-```
-
-Optional flags:
-- `--provider deepseek --model deepseek-chat`
-- `--server-execute-mode auto|minimal|oneshot`
-- `--keep-artifacts` keeps temporary logs under `/private/tmp/mq9-hermes-e2e.*`
-
-## Quality Gates
-
-Run unit tests:
-
-```bash
-source example/hermes-plugin-mq9/.venv-hermes/bin/activate
-python -m unittest discover -s example/hermes-plugin-mq9/tests -p 'test_*.py' -v
-```
-
-Run conformance p0:
-
-```bash
-source example/hermes-plugin-mq9/.venv-hermes/bin/activate
-python example/hermes-plugin-mq9/conformance/run_conformance.py \
-  --sdk python \
-  --suite p0 \
-  --nats-url nats://127.0.0.1:46222 \
-  --json-out /private/tmp/mq9_conformance_python_p0_20260514.json
-```
-
-## Hermes Download + E2E Test
-
-If `hermes` is not installed, use a local virtualenv:
-
-```bash
-python3.12 -m venv example/hermes-plugin-mq9/.venv-hermes
-source example/hermes-plugin-mq9/.venv-hermes/bin/activate
-pip install -e /private/tmp/hermes-agent
-```
-
-Install plugin into Hermes home:
-
-```bash
-mkdir -p ~/.hermes/plugins
-cp -R example/hermes-plugin-mq9/mq9 ~/.hermes/plugins/mq9
-hermes plugins enable mq9
-```
-
-Run broker:
-
-```bash
-cargo run --package cmd --bin broker-server -- --conf config/server-poc-isolated.toml
-```
-
-In another terminal, run Hermes-B (server side):
-
-```bash
-source example/hermes-plugin-mq9/.venv-hermes/bin/activate
-python example/hermes-plugin-mq9/hermes_plugin_toolcall.py \
+RUN_ID=$(date +%s)
+python hermes_plugin_toolcall.py \
   --home ~/.hermes \
   --mode server \
   --nats-url nats://127.0.0.1:45222 \
-  --agent-name hermes-b \
-  --mailbox hermes.b.inbox.$(date +%s) \
+  --agent-name hermes-b-standalone-$RUN_ID \
+  --mailbox hermes.b.standalone.inbox.$RUN_ID \
   --duration 120
 ```
 
-Run Hermes-A (caller side):
+3. In another terminal, use the same `RUN_ID` for `Hermes-A` caller:
 
 ```bash
-source example/hermes-plugin-mq9/.venv-hermes/bin/activate
-python example/hermes-plugin-mq9/hermes_plugin_toolcall.py \
+python hermes_plugin_toolcall.py \
   --home ~/.hermes \
   --mode client \
   --nats-url nats://127.0.0.1:45222 \
-  --agent-name hermes-a \
-  --mailbox hermes.a.inbox.$(date +%s) \
-  --query "hermes-b" \
-  --prefer-name hermes-b
+  --agent-name hermes-a-standalone-$RUN_ID \
+  --mailbox hermes.a.standalone.inbox.$RUN_ID \
+  --query "hermes-b-standalone-$RUN_ID" \
+  --prefer-name "hermes-b-standalone-$RUN_ID"
 ```
 
-Expected caller result:
-- `mq9_discover` returns the `hermes-b` card
-- `mq9_call` returns `ok: true` with `mq9_call_reply`
+Expected:
 
-## Notes
+- discover returns target agent card
+- call returns `ok: true` and `mq9_call_reply`
 
-- `minimal` mode is safest for offline or model-less environments.
-- `oneshot` mode requires a valid inference key (for example `DEEPSEEK_API_KEY`) and a reachable model endpoint.
-- Runtime now uses idempotent mailbox creation to keep mailbox names stable across restarts.
-- Runtime performs best-effort unregister on `on_session_finalize` and process exit to reduce stale discover records.
+## Automated Phase-4 E2E
+
+`run_phase4_e2e.py` now supports two plugin source modes:
+
+- `--plugin-source directory`: copy local `mq9/` into isolated home (legacy dev mode)
+- `--plugin-source entrypoint`: verify installed pip entrypoint plugin (standalone publish mode)
+
+Toolcall (no model key):
+
+```bash
+python run_phase4_e2e.py \
+  --mode toolcall \
+  --plugin-source entrypoint \
+  --nats-url nats://127.0.0.1:45222
+```
+
+LLM mode (requires key):
+
+```bash
+python run_phase4_e2e.py \
+  --mode llm \
+  --plugin-source entrypoint \
+  --provider deepseek \
+  --model deepseek-chat \
+  --api-key "$DEEPSEEK_API_KEY" \
+  --nats-url nats://127.0.0.1:45222
+```
+
+## Tests
+
+Unit tests:
+
+```bash
+python -m unittest discover -s tests -p 'test_*.py' -v
+```
+
+Conformance (Python p0):
+
+```bash
+python conformance/run_conformance.py \
+  --sdk python \
+  --suite p0 \
+  --nats-url nats://127.0.0.1:46222 \
+  --json-out /private/tmp/mq9_conformance_python_p0_latest.json
+```
+
+## Rust core location
+
+This repository is only Hermes plugin adapter code (Python).
+
+RobustMQ mq9 core stays in RobustMQ repo (Rust), mainly under:
+
+- `src/mq9-core/`
+- `src/nats-broker/src/mq9/`

@@ -41,7 +41,7 @@ cargo run --package cmd --bin broker-server -- --conf config/server.toml
 Then run conformance:
 
 ```bash
-python example/hermes-plugin-mq9/conformance/run_conformance.py \
+python conformance/run_conformance.py \
   --sdk python \
   --suite p0 \
   --nats-url nats://127.0.0.1:4222
@@ -50,7 +50,7 @@ python example/hermes-plugin-mq9/conformance/run_conformance.py \
 Save JSON report:
 
 ```bash
-python example/hermes-plugin-mq9/conformance/run_conformance.py \
+python conformance/run_conformance.py \
   --sdk python \
   --suite p0 \
   --json-out /private/tmp/mq9_conformance_python_p0.json
@@ -59,7 +59,7 @@ python example/hermes-plugin-mq9/conformance/run_conformance.py \
 Run selected cases:
 
 ```bash
-python example/hermes-plugin-mq9/conformance/run_conformance.py \
+python conformance/run_conformance.py \
   --sdk python \
   --suite p0 \
   --cases mailbox.create_send_fetch_ack,agent.register_discover
@@ -76,7 +76,7 @@ python example/hermes-plugin-mq9/conformance/run_conformance.py \
 Run unit tests + conformance together:
 
 ```bash
-example/hermes-plugin-mq9/conformance/run_ci_gate.sh
+conformance/run_ci_gate.sh
 ```
 
 Env overrides:

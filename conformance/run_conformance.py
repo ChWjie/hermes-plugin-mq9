@@ -2,7 +2,7 @@
 """mq9 SDK conformance runner for Hermes plugin foundation (B2).
 
 Current status:
-- python: implemented (using example/hermes-plugin-mq9/mq9/mq9_client.py)
+- python: implemented (using mq9/mq9_client.py)
 - go: reserved in matrix, not implemented yet
 """
 
