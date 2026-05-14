@@ -10,6 +10,8 @@ Last updated: 2026-05-14
 - Entry point group: `hermes_agent.plugins`
 - Entry point name: `mq9`
 
+Repository now also supports Hermes ecosystem directory install (`hermes plugins install owner/repo`) by shipping root-level `plugin.yaml` + `__init__.py` shim.
+
 ## Why standalone
 
 Hermes maintainers requested standalone plugin delivery (not new in-tree plugin under `plugins/`).
@@ -76,6 +78,15 @@ Validated on 2026-05-14.
   - call `ok: true`
   - got `mq9_call_reply` from Hermes-B in `minimal` mode
   - unregister cleanup `ok: true`
+
+5. Hermes ecosystem install path compatibility
+
+- Command:
+  - `hermes plugins install ChWjie/hermes-plugin-mq9 --enable`
+- Expected:
+  - cloned repo under `~/.hermes/plugins/`
+  - plugin manifest name `mq9`
+  - Hermes can load it as directory plugin
 
 ## Compatibility note
 

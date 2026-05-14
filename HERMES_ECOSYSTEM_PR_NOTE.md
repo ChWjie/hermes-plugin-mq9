@@ -22,10 +22,10 @@ In-tree PR path under `NousResearch/hermes-agent/plugins/` is intentionally not 
 
 ```bash
 pip install git+https://github.com/NousResearch/hermes-agent.git
-pip install git+https://github.com/ChWjie/hermes-plugin-mq9.git
+hermes plugins install ChWjie/hermes-plugin-mq9 --enable
 ```
 
-Then enable in `~/.hermes/config.yaml`:
+Then configure mq9 entries in `~/.hermes/config.yaml`:
 
 ```yaml
 plugins:

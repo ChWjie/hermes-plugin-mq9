@@ -30,18 +30,25 @@ This repository is that standalone package.
 pip install git+https://github.com/NousResearch/hermes-agent.git
 ```
 
-2. Install mq9 plugin (this repo):
+2. Choose one plugin install method:
+
+Method A (Hermes ecosystem command, directory plugin):
+
+```bash
+hermes plugins install ChWjie/hermes-plugin-mq9 --enable
+```
+
+Method B (pip entrypoint plugin):
 
 ```bash
 pip install git+https://github.com/ChWjie/hermes-plugin-mq9.git
 ```
 
-3. Enable plugin in `~/.hermes/config.yaml`:
+3. Configure mq9 runtime in `~/.hermes/config.yaml`:
 
 ```yaml
 plugins:
-  enabled:
-    - mq9
+  enabled: [mq9]
   entries:
     mq9:
       nats_url: "nats://127.0.0.1:45222"
@@ -71,8 +78,8 @@ Env vars (higher priority):
 - `HERMES_MQ9_ONESHOT_TIMEOUT`
 
 Note:
-- In the upstream snapshot we validated on **2026-05-14** (Hermes commit `524490a`), `hermes plugins list/enable` scans directory plugins only.
-- Pip entrypoint plugins still load correctly at runtime when added in `plugins.enabled`.
+- On the upstream snapshot validated on **2026-05-14** (Hermes commit `524490a`), `hermes plugins list/enable` focuses on directory plugins.
+- If you use Method B (pip), keep `mq9` in `plugins.enabled` as shown above.
 
 ## Quick check (entrypoint installed)
 
