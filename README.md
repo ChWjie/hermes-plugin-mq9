@@ -1,4 +1,14 @@
-# hermes-plugin-mq9
+# mq9-hermes-openclaw-plugin
+
+[中文说明（README.zh-CN）](README.zh-CN.md)
+
+## What This Plugin Does
+
+This plugin is a transport and discovery bridge for multi-agent systems:
+
+- It keeps **A2A-style agent interaction semantics** (`discover`, `call`) at the tool layer.
+- It uses **RobustMQ mq9 as the transport substrate** under the hood.
+- It exposes one plugin package that can be used by **Hermes now** and migrated to **OpenClaw with near-zero cost**.
 
 `mq9` transport plugin for Hermes. This standalone package adds cross-agent communication over RobustMQ mq9 with a protocol-agnostic core:
 
@@ -49,13 +59,13 @@ pip install git+https://github.com/NousResearch/hermes-agent.git
 Method A (Hermes ecosystem command, directory plugin):
 
 ```bash
-hermes plugins install ChWjie/hermes-plugin-mq9 --enable
+hermes plugins install ChWjie/mq9-hermes-openclaw-plugin --enable
 ```
 
 Method B (pip entrypoint plugin):
 
 ```bash
-pip install git+https://github.com/ChWjie/hermes-plugin-mq9.git
+pip install git+https://github.com/ChWjie/mq9-hermes-openclaw-plugin.git
 ```
 
 3. Configure mq9 runtime in `~/.hermes/config.yaml`:
