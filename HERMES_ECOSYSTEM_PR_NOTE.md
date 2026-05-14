@@ -5,7 +5,7 @@
 This integration is published as a standalone plugin repository:
 
 - Repo: `https://github.com/ChWjie/hermes-plugin-mq9`
-- Release: `v0.2.1`
+- Release: `v0.2.2`
 
 In-tree PR path under `NousResearch/hermes-agent/plugins/` is intentionally not used, following Hermes maintainer guidance in `CONTRIBUTING.md`.
 

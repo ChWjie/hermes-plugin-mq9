@@ -1,5 +1,5 @@
 name: mq9
-version: 0.2.1
+version: 0.2.2
 description: "mq9 transport plugin for Hermes with lifecycle-safe register/discover/call and passive inbox serving"
 author: RobustMQ
 kind: standalone
